@@ -16,6 +16,31 @@ namespace ExcelToolkit
 
         /// <summary>
         /// This method processes only the **first worksheet** of the Excel file (.xls or .xlsx).
+        /// The worksheet will use the first row as its header row.
+        /// Property mapping is based on matching the column headers to either the property names or their <see cref="System.ComponentModel.DisplayNameAttribute"/> values on <typeparamref name="T"/>.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="filePath"></param>
+        /// <returns></returns>
+        /// <exception cref="Exception"></exception>
+        public List<T> Import<T>(string filePath) where T : class, new()
+        {
+            RegisterEncodingProvider();
+            ImposeFileSizeLimit(filePath);
+
+            using (var stream = OpenFileStream(filePath))
+            using (var reader = ExcelReaderFactory.CreateReader(stream))
+            {
+                var dataTable = GetTable(reader, useHeaderRow: true);
+                var columnMap = BuildColumnMap(dataTable.Columns);
+                var propertyMap = MapPropertiesToColumns<T>(columnMap);
+
+                return ReadDataRows<T>(dataTable, 1, propertyMap, columnMap).ToList();
+            }
+        }
+
+        /// <summary>
+        /// This method processes only the **first worksheet** of the Excel file (.xls or .xlsx).
         /// The worksheet must contain a clearly defined header row, where one of the cells in column A matches the specified <paramref name="columnAHeaderName"/>.
         /// Property mapping is based on matching the column headers to either the property names or their <see cref="System.ComponentModel.DisplayNameAttribute"/> values on <typeparamref name="T"/>.
         /// </summary>
@@ -27,6 +52,7 @@ namespace ExcelToolkit
         public List<T> Import<T>(string filePath, string columnAHeaderName) where T : class, new()
         {
             RegisterEncodingProvider();
+            ImposeFileSizeLimit(filePath);
 
             using (var stream = OpenFileStream(filePath))
             using (var reader = ExcelReaderFactory.CreateReader(stream))
@@ -60,6 +86,7 @@ namespace ExcelToolkit
         public List<T> Import<T>(string filePath, int headerRowIndex) where T : class, new()
         {
             RegisterEncodingProvider();
+            ImposeFileSizeLimit(filePath);
 
             using (var stream = OpenFileStream(filePath))
             using (var reader = ExcelReaderFactory.CreateReader(stream))
@@ -87,6 +114,17 @@ namespace ExcelToolkit
             }
         }
 
+        private static void ImposeFileSizeLimit(string filePath, long maxSizeInMB = 30)
+        {
+            var fileInfo = new FileInfo(filePath);
+            long fileSizeMB = fileInfo.Length / (1024 * 1024);
+
+            if (fileSizeMB > maxSizeInMB)
+            {
+                throw new InvalidOperationException($"File size exceeds limit of {maxSizeInMB} MB. Current size: {fileSizeMB} MB");
+            }
+        }
+
         private FileStream OpenFileStream(string filePath)
         {
             if (!File.Exists(filePath))
@@ -103,11 +141,11 @@ namespace ExcelToolkit
             return File.Open(filePath, FileMode.Open, FileAccess.Read);
         }
 
-        private DataTable GetTable(IExcelDataReader reader)
+        private DataTable GetTable(IExcelDataReader reader, bool useHeaderRow = false)
         {
             var result = reader.AsDataSet(new ExcelDataSetConfiguration
             {
-                ConfigureDataTable = _ => new ExcelDataTableConfiguration { UseHeaderRow = false }
+                ConfigureDataTable = _ => new ExcelDataTableConfiguration { UseHeaderRow = useHeaderRow }
             });
 
             return result.Tables[0];
@@ -129,11 +167,27 @@ namespace ExcelToolkit
 
         private Dictionary<string, int> BuildColumnMap(DataRow headerRow)
         {
-            var map = new Dictionary<string, int>();
+            var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
             for (int i = 0; i < headerRow.Table.Columns.Count; i++)
             {
                 var columnName = headerRow[i]?.ToString()?.Trim();
+                if (!string.IsNullOrEmpty(columnName))
+                {
+                    map[columnName] = i;
+                }
+            }
+
+            return map;
+        }
+
+        private Dictionary<string, int> BuildColumnMap(DataColumnCollection dataTableColumns)
+        {
+            var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+            for (int i = 0; i < dataTableColumns.Count; i++)
+            {
+                var columnName = dataTableColumns[i].ColumnName?.Trim();
                 if (!string.IsNullOrEmpty(columnName))
                 {
                     map[columnName] = i;
@@ -183,7 +237,7 @@ namespace ExcelToolkit
                 foreach (var kvp in propertyMap)
                 {
                     var columnIndex = columnMap[kvp.Key];
-                    var value = row[columnIndex]?.ToString();
+                    var value = row[columnIndex]?.ToString().Trim();
                     kvp.Value.SetValue(obj, value);
                 }
 
