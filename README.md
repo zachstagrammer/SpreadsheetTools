@@ -10,6 +10,16 @@ Supports .NET Framework 4.8 and .NET 6+.
 - Skips blank rows
 - Configurable header match value (e.g. "ID")
 
+## Limitations
+- Only supports `.xls` and `.xlsx` Excel file formats.
+- Requires the header row to be clearly identifiable by:
+  - A known column name (e.g., "ID" in column A), or
+  - A specific row index, or
+  - Defaulting to the first row.
+- All properties in the destination class must have public setters.
+- Only string property types are supported
+- Excel files must not be password-protected or encrypted.
+
 ## How to use
 ```c#
 using ExcelToolkit;
