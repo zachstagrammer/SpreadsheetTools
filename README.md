@@ -24,7 +24,7 @@ Supports .NET Framework 4.8 and .NET 6+.
 ```c#
 using ExcelToolkit;
 
-var importer = new ExcelImporter();
+IExcelImporter importer = new ExcelImporter();
 var filePath = "PersonData.xlsx";
 var people = importer.Import<Person>(filePath, "ID");
 
