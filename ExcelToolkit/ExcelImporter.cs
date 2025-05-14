@@ -14,6 +14,16 @@ namespace ExcelToolkit
     {
         private static bool _encodingRegistered = false;
 
+        /// <summary>
+        /// This method processes only the **first worksheet** of the Excel file (.xls or .xlsx).
+        /// The worksheet must contain a clearly defined header row, where one of the cells in column A matches the specified <paramref name="columnAHeaderName"/>.
+        /// Property mapping is based on matching the column headers to either the property names or their <see cref="System.ComponentModel.DisplayNameAttribute"/> values on <typeparamref name="T"/>.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="filePath"></param>
+        /// <param name="columnAHeaderName"></param>
+        /// <returns></returns>
+        /// <exception cref="Exception"></exception>
         public List<T> Import<T>(string filePath, string columnAHeaderName) where T : class, new()
         {
             RegisterEncodingProvider();
@@ -27,6 +37,38 @@ namespace ExcelToolkit
                 if (headerRowIndex == -1)
                 {
                     throw new Exception($"Header row with '{columnAHeaderName}' not found in column A.");
+                }
+
+                var columnMap = BuildColumnMap(dataTable.Rows[headerRowIndex]);
+                var propertyMap = MapPropertiesToColumns<T>(columnMap);
+
+                return ReadDataRows<T>(dataTable, headerRowIndex + 1, propertyMap, columnMap).ToList();
+            }
+        }
+
+        /// <summary>
+        /// This method processes only the **first worksheet** of the Excel file (.xls or .xlsx).
+        /// It uses the specified row index to identify the header row, which is then used to map columns
+        /// to properties of <typeparamref name="T"/>.
+        /// Property mapping is based on matching the column headers to either the property names or their <see cref="System.ComponentModel.DisplayNameAttribute"/> values on <typeparamref name="T"/>.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="filePath"></param>
+        /// <param name="headerRowIndex"></param>
+        /// <returns></returns>
+        /// <exception cref="Exception"></exception>
+        public List<T> Import<T>(string filePath, int headerRowIndex) where T : class, new()
+        {
+            RegisterEncodingProvider();
+
+            using (var stream = OpenFileStream(filePath))
+            using (var reader = ExcelReaderFactory.CreateReader(stream))
+            {
+                var dataTable = GetTable(reader);
+
+                if (headerRowIndex <= 0)
+                {
+                    throw new Exception($"Header row index '{headerRowIndex}' is invalid");
                 }
 
                 var columnMap = BuildColumnMap(dataTable.Rows[headerRowIndex]);
